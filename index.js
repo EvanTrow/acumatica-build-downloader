@@ -1,7 +1,7 @@
 const axios = require('axios');
 const request = require('request');
 var convert = require('xml-js');
-const fs = require('fs');
+const fs = require('fs-extra');
 const path = require('path');
 const naturalSort = require('javascript-natural-sort');
 const stringSimilarity = require('string-similarity');
@@ -9,6 +9,9 @@ const prompt = require('prompt-sync')({ sigint: true });
 const colors = require('colors');
 const Table = require('cli-table');
 const cliProgress = require('cli-progress');
+// const openExplorer = require('open-file-explorer');
+
+const { PowerShell } = require('node-powershell');
 
 var config = {};
 
@@ -129,27 +132,87 @@ async function start(config) {
 
 	console.log(colors.green.bold(`Selected build: `), selectedBuild);
 
-	downloadMSI(`http://acumatica-builds.s3.amazonaws.com/${selectedBuild.path}AcumaticaERP/AcumaticaERPInstall.msi`, (err) => {
+	if (fs.existsSync(`${config.location}/${selectedBuild.build}`)) {
+		const overwriteExisting = prompt(colors.yellow.bold(`Build is already loaded, OVERWRITE existing files in [ ${config.location}\\${selectedBuild.build} ] ?  (y/N) : `));
+		if (overwriteExisting != 'y' && overwriteExisting != 'Y') {
+			console.log('Opening destination folder...'.green);
+			await openExplorer(`${config.location}\\${selectedBuild.build}`);
+			process.exit(0);
+		} else {
+			console.log(`Deleting existing files in ${config.location}\\${selectedBuild.build}...`.yellow);
+			fs.rmSync(`${config.location}/${selectedBuild.build}`, { recursive: true, force: true });
+			console.log('Done.'.green);
+		}
+	}
+
+	downloadMSI(`http://acumatica-builds.s3.amazonaws.com/${selectedBuild.path}AcumaticaERP/AcumaticaERPInstall.msi`, async (err) => {
 		if (err) throw err;
 
-		console.log('Donwload Complete!'.green);
+		console.log('Downloaded!'.green);
 
-		// console.log(`Powershell -ExecutionPolicy Bypass -Command "& '${__dirname}\\ExtractAcumatica.ps1' ${config.location} ${__dirname}\\AcumaticaERPInstall.msi ${__dirname}`);
+		const progressBar = new cliProgress.SingleBar({
+			format: colors.yellow('Extracting') + '  |' + colors.cyan('{bar}') + '| {percentage}% || {value}/{total} Files',
+			barCompleteChar: '\u2588',
+			barIncompleteChar: '\u2591',
+			hideCursor: true,
+		});
+		var spawn = require('child_process').spawn,
+			child;
+		child = spawn(__dirname + '\\lessmsi\\lessmsi.exe', ['x', __dirname + '\\AcumaticaERPInstall.msi', config.location + '\\' + selectedBuild.build]);
+		child.stdout.on('data', function (data) {
+			try {
+				if (progressBar.getProgress() <= 0) {
+					var fileCount = data.toString().split('/')[1].match(/\d+/)[0];
+					progressBar.start(parseInt(fileCount), 1);
+				} else {
+					var activeFile = data.toString().split('/')[0].match(/\d+/)[0];
+					progressBar.update(parseInt(activeFile));
+				}
+			} catch (e) {
+				//console.log(e);
+			}
+		});
+		child.stderr.on('data', function (data) {
+			console.log('Powershell Error: ' + data);
+		});
+		child.on('exit', async () => {
+			progressBar.stop();
+			console.log('Extracted!'.green);
 
-		// var exec = require('child_process').exec,
-		// 	child;
-		// child = exec(
-		// 	`Powershell -ExecutionPolicy Bypass -Command "& '${__dirname}\\ExtractAcumatica.ps1' ${config.location} ${__dirname}\\AcumaticaERPInstall.msi ${__dirname}`,
-		// 	function (error, stdout, stderr) {
-		// 		console.log('stdout: ' + stdout);
-		// 	}
-		// );
+			console.log('Moving Files...'.yellow);
+			if (fs.existsSync(`${__dirname}/AcumaticaERPInstall/SourceDir/Acumatica ERP`)) {
+				// Do something
+
+				fs.moveSync(`${__dirname}/AcumaticaERPInstall/SourceDir/Acumatica ERP`, `${config.location}/${selectedBuild.build}`, (err) => {
+					if (err) return console.error(err);
+					console.log('success!');
+				});
+			} else {
+				fs.moveSync(`${__dirname}/AcumaticaERPInstall/SourceDir`, `${config.location}/${selectedBuild.build}`, (err) => {
+					if (err) return console.error(err);
+					console.log('success!');
+				});
+			}
+			console.log('Moved.'.green);
+
+			console.log('Removing temp files...'.yellow);
+			fs.rmSync(`${__dirname}/AcumaticaERPInstall`, { recursive: true, force: true });
+			fs.rmSync(`${__dirname}/AcumaticaERPInstall.msi`, { recursive: true, force: true });
+			console.log('Done.'.green);
+
+			console.log('COMPLETE!'.green);
+			await openExplorer(`${config.location}\\${selectedBuild.build}`);
+
+			// colors.yellow('Moving Files...');
+			// fs.removeSync(`${__dirname}/AcumaticaERPInstall/`);
+		});
+		child.stdin.end(); //end input
 	});
 }
 
 async function downloadMSI(url, callback) {
 	const progressBar = new cliProgress.SingleBar({
-		format: 'Downloading |' + colors.cyan('{bar}') + '| {percentage}% || {value}/{total} Chunks',
+		format: colors.yellow('Downloading') + ' |' + colors.cyan('{bar}') + '| {percentage}% || {value}/{total} Chunks',
 		barCompleteChar: '\u2588',
 		barIncompleteChar: '\u2591',
 		hideCursor: true,
@@ -195,4 +258,25 @@ async function asyncForEach(array, callback) {
 	for (let index = 0; index < array.length; index++) {
 		await callback(array[index], index, array);
 	}
+}
+
+async function openExplorer(path) {
+	const { spawn } = require('child_process');
+	const child = spawn('explorer', [path]);
+
+	let data = '';
+	for await (const chunk of child.stdout) {
+		//console.log('stdout chunk: '+chunk);
+		data += chunk;
+	}
+	let error = '';
+	for await (const chunk of child.stderr) {
+		console.error('stderr chunk: ' + chunk);
+		error += chunk;
+	}
+	await new Promise((resolve, reject) => {
+		child.on('close', resolve);
+	});
+
+	return data;
 }

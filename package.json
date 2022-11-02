@@ -18,9 +18,11 @@
     "cli-progress": "^3.11.2",
     "cli-table": "^0.3.11",
     "colors": "^1.4.0",
-    "fs": "^0.0.1-security",
+    "fs-extra": "^10.1.0",
     "javascript-natural-sort": "^0.7.1",
     "node-html-parser": "^6.1.1",
+    "node-powershell": "^5.0.1",
+    "open-file-explorer": "^1.0.2",
     "path": "^0.12.7",
     "prompt-sync": "^4.2.0",
     "request": "^2.88.2",
@@ -31,4 +33,5 @@
     "url": "https://github.com/EvanTrow/acumatica-build-downloader/issues"
   },
   "homepage": "https://github.com/EvanTrow/acumatica-build-downloader#readme"
+ 
 }
