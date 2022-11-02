@@ -1,18 +1,22 @@
 const axios = require('axios');
+const request = require('request');
 var convert = require('xml-js');
 const fs = require('fs');
+const path = require('path');
 const naturalSort = require('javascript-natural-sort');
 const stringSimilarity = require('string-similarity');
 const prompt = require('prompt-sync')({ sigint: true });
 const colors = require('colors');
 const Table = require('cli-table');
+const cliProgress = require('cli-progress');
+
+var config = {};
 
 fs.readFile('config.json', (err, data) => {
-	var config = [];
-
 	if (err) {
 		console.log(colors.red('Config not found. ') + 'Running setup...');
-		config.location = prompt(colors.cyan.bold('Extract Location: '));
+		var location = prompt(colors.cyan.bold('Extract Location: '));
+		config.location = location;
 		fs.writeFileSync('config.json', JSON.stringify(config));
 	} else {
 		config = JSON.parse(data);
@@ -124,6 +128,67 @@ async function start(config) {
 	}
 
 	console.log(colors.green.bold(`Selected build: `), selectedBuild);
+
+	downloadMSI(`http://acumatica-builds.s3.amazonaws.com/${selectedBuild.path}AcumaticaERP/AcumaticaERPInstall.msi`, (err) => {
+		if (err) throw err;
+
+		console.log('Donwload Complete!'.green);
+
+		// console.log(`Powershell -ExecutionPolicy Bypass -Command "& '${__dirname}\\ExtractAcumatica.ps1' ${config.location} ${__dirname}\\AcumaticaERPInstall.msi ${__dirname}`);
+
+		// var exec = require('child_process').exec,
+		// 	child;
+		// child = exec(
+		// 	`Powershell -ExecutionPolicy Bypass -Command "& '${__dirname}\\ExtractAcumatica.ps1' ${config.location} ${__dirname}\\AcumaticaERPInstall.msi ${__dirname}`,
+		// 	function (error, stdout, stderr) {
+		// 		console.log('stdout: ' + stdout);
+		// 	}
+		// );
+	});
+}
+
+async function downloadMSI(url, callback) {
+	const progressBar = new cliProgress.SingleBar({
+		format: 'Downloading |' + colors.cyan('{bar}') + '| {percentage}% || {value}/{total} Chunks',
+		barCompleteChar: '\u2588',
+		barIncompleteChar: '\u2591',
+		hideCursor: true,
+	});
+
+	const file = fs.createWriteStream('AcumaticaERPInstall.msi');
+	let receivedBytes = 0;
+
+	request
+		.get(url)
+		.on('response', (response) => {
+			if (response.statusCode !== 200) {
+				return callback('Response status was ' + response.statusCode);
+			}
+
+			const totalBytes = response.headers['content-length'];
+			progressBar.start(totalBytes, 0);
+		})
+		.on('data', (chunk) => {
+			receivedBytes += chunk.length;
+			progressBar.update(receivedBytes);
+		})
+		.pipe(file)
+		.on('error', (err) => {
+			fs.unlink(filename);
+			progressBar.stop();
+			return callback(err.message);
+		});
+
+	file.on('finish', () => {
+		progressBar.stop();
+		file.close(callback);
+	});
+
+	file.on('error', (err) => {
+		fs.unlink(filename);
+		progressBar.stop();
+		return callback(err.message);
+	});
 }
 
 async function asyncForEach(array, callback) {
