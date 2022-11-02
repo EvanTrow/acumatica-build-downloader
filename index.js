@@ -2,16 +2,12 @@ const axios = require('axios');
 const request = require('request');
 var convert = require('xml-js');
 const fs = require('fs-extra');
-const path = require('path');
 const naturalSort = require('javascript-natural-sort');
 const stringSimilarity = require('string-similarity');
 const prompt = require('prompt-sync')({ sigint: true });
 const colors = require('colors');
 const Table = require('cli-table');
 const cliProgress = require('cli-progress');
-// const openExplorer = require('open-file-explorer');
-
-const { PowerShell } = require('node-powershell');
 
 var config = {};
 
