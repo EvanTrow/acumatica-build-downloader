@@ -1,6 +1,5 @@
-const axios = require('axios');
 const request = require('request');
-var convert = require('xml-js');
+const convert = require('xml-js');
 const fs = require('fs-extra');
 const naturalSort = require('javascript-natural-sort');
 const stringSimilarity = require('string-similarity');
@@ -14,14 +13,22 @@ var config = {};
 fs.readFile('config.json', (err, data) => {
 	if (err) {
 		console.log(colors.red('Config not found. ') + 'Running setup...');
-		var location = prompt(colors.cyan.bold('Extract Location: '));
-		config.location = location;
+		var location = prompt(`${colors.cyan.bold('Extract Location?')} (${colors.dim('C:\\acu')}) : `);
+
+		if (!location) config.location = `C:\\acu`;
+		else config.location = location;
+
+		var lessmsi = prompt(`${colors.cyan.bold('Where is the lessmsi.exe installed?')} (${colors.dim('C:\\ProgramData\\chocolatey\\lib\\lessmsi\\tools\\lessmsi.exe')}) : `);
+
+		if (!lessmsi) config.lessmsi = `C:\\ProgramData\\chocolatey\\lib\\lessmsi\\tools\\lessmsi.exe`;
+		else config.lessmsi = lessmsi;
+
 		fs.writeFileSync('config.json', JSON.stringify(config));
 	} else {
 		config = JSON.parse(data);
 	}
 
-	start(config);
+	start();
 });
 
 var builds = [];
@@ -29,13 +36,12 @@ var versions = [];
 
 var xmlOptions = { compact: true, spaces: 4 };
 
-async function start(config) {
+async function start() {
 	const requestedBuild = prompt(colors.cyan.bold('Acumatica Build Nbr: '));
 
-	await axios
-		.get(`http://acumatica-builds.s3.amazonaws.com/?delimiter=/&prefix=builds/`)
-		.then(async (res) => {
-			await asyncForEach(convert.xml2js(res.data, xmlOptions).ListBucketResult.CommonPrefixes, async (folder, i) => {
+	await WebRequest(`http://acumatica-builds.s3.amazonaws.com/?delimiter=/&prefix=builds/`)
+		.then(async (body) => {
+			await asyncForEach(convert.xml2js(body, xmlOptions).ListBucketResult.CommonPrefixes, async (folder, i) => {
 				if (/^(\d*\.)\d.*$/.test(folder.Prefix._text.replace('builds/', '').replace('/', ''))) {
 					var version = folder.Prefix._text.replace('builds/', '').replace('/', '');
 
@@ -52,10 +58,9 @@ async function start(config) {
 				var verionBuilds = [];
 				var verionBuildz = [];
 
-				await axios
-					.get(`http://acumatica-builds.s3.amazonaws.com/?delimiter=/&prefix=builds/${version}/`)
-					.then((res) => {
-						convert.xml2js(res.data, xmlOptions).ListBucketResult.CommonPrefixes.forEach((build) => {
+				await WebRequest(`http://acumatica-builds.s3.amazonaws.com/?delimiter=/&prefix=builds/${version}/`)
+					.then((body) => {
+						convert.xml2js(body, xmlOptions).ListBucketResult.CommonPrefixes.forEach((build) => {
 							if (/^\d{1,}\.\d{1,}\.\d{1,}/.test(build.Prefix._text.replace('builds/', '').replace('/', ''))) {
 								verionBuilds.push({
 									version: version,
@@ -154,7 +159,7 @@ async function start(config) {
 		});
 		var spawn = require('child_process').spawn,
 			child;
-		child = spawn(__dirname + '\\lessmsi\\lessmsi.exe', ['x', __dirname + '\\AcumaticaERPInstall.msi', config.location + '\\' + selectedBuild.build]);
+		child = spawn(config.lessmsi, ['x', 'AcumaticaERPInstall.msi', config.location + '\\' + selectedBuild.build]);
 		child.stdout.on('data', function (data) {
 			try {
 				if (progressBar.getProgress() <= 0) {
@@ -176,15 +181,15 @@ async function start(config) {
 			console.log('Extracted!'.green);
 
 			console.log('Moving Files...'.yellow);
-			if (fs.existsSync(`${__dirname}/AcumaticaERPInstall/SourceDir/Acumatica ERP`)) {
+			if (fs.existsSync(`AcumaticaERPInstall/SourceDir/Acumatica ERP`)) {
 				// Do something
 
-				fs.moveSync(`${__dirname}/AcumaticaERPInstall/SourceDir/Acumatica ERP`, `${config.location}/${selectedBuild.build}`, (err) => {
+				fs.moveSync(`AcumaticaERPInstall/SourceDir/Acumatica ERP`, `${config.location}/${selectedBuild.build}`, (err) => {
 					if (err) return console.error(err);
 					console.log('success!');
 				});
 			} else {
-				fs.moveSync(`${__dirname}/AcumaticaERPInstall/SourceDir`, `${config.location}/${selectedBuild.build}`, (err) => {
+				fs.moveSync(`AcumaticaERPInstall/SourceDir`, `${config.location}/${selectedBuild.build}`, (err) => {
 					if (err) return console.error(err);
 					console.log('success!');
 				});
@@ -192,15 +197,12 @@ async function start(config) {
 			console.log('Moved.'.green);
 
 			console.log('Removing temp files...'.yellow);
-			fs.rmSync(`${__dirname}/AcumaticaERPInstall`, { recursive: true, force: true });
-			fs.rmSync(`${__dirname}/AcumaticaERPInstall.msi`, { recursive: true, force: true });
+			fs.rmSync(`AcumaticaERPInstall`, { recursive: true, force: true });
+			fs.rmSync(`AcumaticaERPInstall.msi`, { recursive: true, force: true });
 			console.log('Done.'.green);
 
 			console.log('COMPLETE!'.green);
 			await openExplorer(`${config.location}\\${selectedBuild.build}`);
-
-			// colors.yellow('Moving Files...');
-			// fs.removeSync(`${__dirname}/AcumaticaERPInstall/`);
 		});
 		child.stdin.end(); //end input
 	});
@@ -247,6 +249,18 @@ async function downloadMSI(url, callback) {
 		fs.unlink(filename);
 		progressBar.stop();
 		return callback(err.message);
+	});
+}
+
+function WebRequest(url) {
+	return new Promise(function (resolve, reject) {
+		request(url, function (error, res, body) {
+			if (!error && res.statusCode === 200) {
+				resolve(body);
+			} else {
+				reject(error);
+			}
+		});
 	});
 }
 
