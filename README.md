@@ -20,7 +20,7 @@ npm install
 To start the script just run the following command
 
 ```shell
-npm install
+npm start
 ```
 
 ![Use](./doc/acuamtica-build-downloader.gif 'Running Example')
