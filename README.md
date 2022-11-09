@@ -23,7 +23,7 @@ acumatica-build-downloader.exe
 ## Install NodeJS Dependencies
 
 ```shell
-npm install
+npm start
 ```
 
 ## Running
