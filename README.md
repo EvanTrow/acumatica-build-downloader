@@ -10,7 +10,7 @@ Downloads and extracts Acumatica MSI - **_Only works with Windows_**
 
 # Use
 
-To start the script just run the executable file:
+To start the script just run the [executable file](https://github.com/EvanTrow/acumatica-build-downloader/releases):
 
 ```shell
 acumatica-build-downloader.exe
