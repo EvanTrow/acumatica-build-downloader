@@ -14,7 +14,6 @@ acumatica-build-downloader.exe
 # Development
 
 ## Requirements
-# Requirements
 -   [NodeJS](https://nodejs.org/en/download/)
 -   [lessmsi](https://lessmsi.activescott.com/) (Install with [Chocolatey](https://chocolatey.org/install))
 
