@@ -13,15 +13,20 @@ var config = {};
 fs.readFile('config.json', (err, data) => {
 	if (err) {
 		console.log(colors.red('Config not found. ') + 'Running setup...');
-		var location = prompt(`${colors.cyan.bold('Extract Location?')} (${colors.dim('C:\\acu')}) : `);
 
-		if (!location) config.location = `C:\\acu`;
-		else config.location = location;
+		var extractMsi = prompt(`${colors.cyan.bold('Extract MSI after download?')} (${colors.dim('Y/n')}) : `);
+		if (!extractMsi) config.extractMsi = true;
+		else config.extractMsi = extractMsi.toLocaleLowerCase() == 'y' ? true : false;
 
-		var lessmsi = prompt(`${colors.cyan.bold('Where is the lessmsi.exe installed?')} (${colors.dim('C:\\ProgramData\\chocolatey\\lib\\lessmsi\\tools\\lessmsi.exe')}) : `);
+		if (config.extractMsi) {
+			var location = prompt(`${colors.cyan.bold('Extract Location?')} (${colors.dim('C:\\acu')}) : `);
+			if (!location) config.location = `C:\\acu`;
+			else config.location = location;
 
-		if (!lessmsi) config.lessmsi = `C:\\ProgramData\\chocolatey\\lib\\lessmsi\\tools\\lessmsi.exe`;
-		else config.lessmsi = lessmsi;
+			var lessmsi = prompt(`${colors.cyan.bold('Where is the lessmsi.exe installed?')} (${colors.dim('C:\\ProgramData\\chocolatey\\lib\\lessmsi\\tools\\lessmsi.exe')}) : `);
+			if (!lessmsi) config.lessmsi = `C:\\ProgramData\\chocolatey\\lib\\lessmsi\\tools\\lessmsi.exe`;
+			else config.lessmsi = lessmsi;
+		}
 
 		fs.writeFileSync('config.json', JSON.stringify(config));
 	} else {
@@ -133,16 +138,18 @@ async function start() {
 
 	console.log(colors.green.bold(`Selected build: `), selectedBuild);
 
-	if (fs.existsSync(`${config.location}/${selectedBuild.build}`)) {
-		const overwriteExisting = prompt(colors.yellow.bold(`Build is already loaded, OVERWRITE existing files in [ ${config.location}\\${selectedBuild.build} ] ?  (y/N) : `));
-		if (overwriteExisting != 'y' && overwriteExisting != 'Y') {
-			console.log('Opening destination folder...'.green);
-			await openExplorer(`${config.location}\\${selectedBuild.build}`);
-			process.exit(0);
-		} else {
-			console.log(`Deleting existing files in ${config.location}\\${selectedBuild.build}...`.yellow);
-			fs.rmSync(`${config.location}/${selectedBuild.build}`, { recursive: true, force: true });
-			console.log('Done.'.green);
+	if (config.extractMsi == true) {
+		if (fs.existsSync(`${config.location}/${selectedBuild.build}`)) {
+			const overwriteExisting = prompt(colors.yellow.bold(`Build is already loaded, OVERWRITE existing files in [ ${config.location}\\${selectedBuild.build} ] ?  (y/N) : `));
+			if (overwriteExisting != 'y' && overwriteExisting != 'Y') {
+				console.log('Opening destination folder...'.green);
+				await openExplorer(`${config.location}\\${selectedBuild.build}`);
+				process.exit(0);
+			} else {
+				console.log(`Deleting existing files in ${config.location}\\${selectedBuild.build}...`.yellow);
+				fs.rmSync(`${config.location}/${selectedBuild.build}`, { recursive: true, force: true });
+				console.log('Done.'.green);
+			}
 		}
 	}
 
@@ -151,60 +158,66 @@ async function start() {
 
 		console.log('Downloaded!'.green);
 
-		const progressBar = new cliProgress.SingleBar({
-			format: colors.yellow('Extracting') + '  |' + colors.cyan('{bar}') + '| {percentage}% || {value}/{total} Files',
-			barCompleteChar: '\u2588',
-			barIncompleteChar: '\u2591',
-			hideCursor: true,
-		});
-		var spawn = require('child_process').spawn,
-			child;
-		child = spawn(config.lessmsi, ['x', 'AcumaticaERPInstall.msi', config.location + '\\' + selectedBuild.build]);
-		child.stdout.on('data', function (data) {
-			try {
-				if (progressBar.getProgress() <= 0) {
-					var fileCount = data.toString().split('/')[1].match(/\d+/)[0];
-					progressBar.start(parseInt(fileCount), 1);
-				} else {
-					var activeFile = data.toString().split('/')[0].match(/\d+/)[0];
-					progressBar.update(parseInt(activeFile));
+		if (config.extractMsi == true) {
+			const progressBar = new cliProgress.SingleBar({
+				format: colors.yellow('Extracting') + '  |' + colors.cyan('{bar}') + '| {percentage}% || {value}/{total} Files',
+				barCompleteChar: '\u2588',
+				barIncompleteChar: '\u2591',
+				hideCursor: true,
+			});
+			var spawn = require('child_process').spawn,
+				child;
+			child = spawn(config.lessmsi, ['x', 'AcumaticaERPInstall.msi', config.location + '\\' + selectedBuild.build]);
+			child.stdout.on('data', function (data) {
+				try {
+					if (progressBar.getProgress() <= 0) {
+						var fileCount = data.toString().split('/')[1].match(/\d+/)[0];
+						progressBar.start(parseInt(fileCount), 1);
+					} else {
+						var activeFile = data.toString().split('/')[0].match(/\d+/)[0];
+						progressBar.update(parseInt(activeFile));
+					}
+				} catch (e) {
+					//console.log(e);
 				}
-			} catch (e) {
-				//console.log(e);
-			}
-		});
-		child.stderr.on('data', function (data) {
-			console.log('Powershell Error: ' + data);
-		});
-		child.on('exit', async () => {
-			progressBar.stop();
-			console.log('Extracted!'.green);
+			});
+			child.stderr.on('data', function (data) {
+				console.log('Powershell Error: ' + data);
+			});
+			child.on('exit', async () => {
+				progressBar.stop();
+				console.log('Extracted!'.green);
 
-			console.log('Moving Files...'.yellow);
-			if (fs.existsSync(`AcumaticaERPInstall/SourceDir/Acumatica ERP`)) {
-				// Do something
+				console.log('Moving Files...'.yellow);
+				if (fs.existsSync(`AcumaticaERPInstall/SourceDir/Acumatica ERP`)) {
+					// Do something
 
-				fs.moveSync(`AcumaticaERPInstall/SourceDir/Acumatica ERP`, `${config.location}/${selectedBuild.build}`, (err) => {
-					if (err) return console.error(err);
-					console.log('success!');
-				});
-			} else {
-				fs.moveSync(`AcumaticaERPInstall/SourceDir`, `${config.location}/${selectedBuild.build}`, (err) => {
-					if (err) return console.error(err);
-					console.log('success!');
-				});
-			}
-			console.log('Moved.'.green);
+					fs.moveSync(`AcumaticaERPInstall/SourceDir/Acumatica ERP`, `${config.location}/${selectedBuild.build}`, (err) => {
+						if (err) return console.error(err);
+					});
+				} else {
+					fs.moveSync(`AcumaticaERPInstall/SourceDir`, `${config.location}/${selectedBuild.build}`, (err) => {
+						if (err) return console.error(err);
+					});
+				}
+				console.log('Moved.'.green);
 
-			console.log('Removing temp files...'.yellow);
-			fs.rmSync(`AcumaticaERPInstall`, { recursive: true, force: true });
-			fs.rmSync(`AcumaticaERPInstall.msi`, { recursive: true, force: true });
-			console.log('Done.'.green);
+				console.log('Removing temp files...'.yellow);
+				fs.rmSync(`AcumaticaERPInstall`, { recursive: true, force: true });
+				fs.rmSync(`AcumaticaERPInstall.msi`, { recursive: true, force: true });
+				console.log('Done.'.green);
 
-			console.log('COMPLETE!'.green);
-			await openExplorer(`${config.location}\\${selectedBuild.build}`);
-		});
-		child.stdin.end(); //end input
+				console.log('COMPLETE!'.green);
+				await openExplorer(`${config.location}\\${selectedBuild.build}`);
+			});
+			child.stdin.end(); //end input
+		} else {
+			fs.renameSync('AcumaticaERPInstall.msi', `AcumaticaERPInstall-${selectedBuild.build}.msi`);
+
+			console.log(`COMPLETE! - AcumaticaERPInstall-${selectedBuild.build}.msi`.green);
+
+			await openExplorer(__dirname);
+		}
 	});
 }
 

@@ -105,3 +105,4 @@ dist
 AcumaticaERPInstall/
 AcumaticaERPInstall.msi
 config.json
+*.msi
