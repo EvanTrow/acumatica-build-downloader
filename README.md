@@ -19,7 +19,8 @@ acumatica-build-downloader.exe
 
 ## Install NodeJS Dependencies
 ```shell
-npm start
+npm install
+npm install pgk -g
 ```
 
 ## Running
